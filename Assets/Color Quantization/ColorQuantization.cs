@@ -1,95 +1,122 @@
 ﻿using System.Collections;
 using System.Collections.Generic;
 using UnityEngine;
+using UnityEngine.UI;
 
 public class ColorQuantization : MonoBehaviour {
 
-	public ComputeShader computeShader;
-	public uint[] histogramData;
-	public int[] colorData;
+	public ComputeShader Trainer;
+	public Material ColorQMat;
+	public int PaletteSize = 2;
+	public bool AutoCorrect = false;
+	public int Threshold = 10000;
 
-	ComputeBuffer histogramBuffer;
-	ComputeBuffer colorBuffer;
-	int handleMain;
-	int handleInitialize;
+	//Data Handlers
+	private int[] colorData;
+	private ComputeBuffer colorBuffer;
 	int handleColorQInitialize;
 	int handleColorQ;
-	Color[] newColors;
+	private Color[] newColors;
+	float linePos = 0.5f;
+	float lineVel = 1.5f;
+	Texture2D colorPalette;
+	public RawImage palette;
 
-
-	public int Threshold = 50000;
-
-
-	public int Size = 2;
-	public GameObject Trainer;
-	public Texture2D colorPalette;
-	public Material colorqMat;
-
-
-	// Use this for initialization
 	void Start () {
-		//
-		handleColorQInitialize = computeShader.FindKernel("ColorQInitialize");
-		handleColorQ = computeShader.FindKernel("ColorQ");
-		colorBuffer = new ComputeBuffer(4, sizeof(int) * 4);
-		colorData = new int[4 * 4];
-		newColors = new Color[4];
+		//Getting References
+		handleColorQInitialize = Trainer.FindKernel("ColorQInitialize");
+		handleColorQ = Trainer.FindKernel("ColorQ");
 
-		
-		computeShader.SetBuffer(handleColorQ, "ColorBuffer", colorBuffer);
-		computeShader.SetBuffer(handleColorQInitialize, "ColorBuffer", colorBuffer);
-
-		colorPalette = new Texture2D(Size, Size, TextureFormat.ARGB32, false);
-		// colorPalette.SetPixel(0, 0, Color.red);
-     	// colorPalette.SetPixel(1, 0, Color.blue);
-		// colorPalette.SetPixel(2, 0, new Color(0.1f, 0.1f, 0.1f, 1f));
-     	// colorPalette.SetPixel(0, 1, Color.green);
-		// colorPalette.SetPixel(1, 1, new Color(0.2f, 0.2f, 0.2f, 1f));
-     	// colorPalette.SetPixel(2, 1, Color.magenta);
-		// colorPalette.SetPixel(0, 2, new Color(0.3f, 0.3f, 0.3f, 1f));
-		// colorPalette.SetPixel(1, 2, new Color(0.4f, 0.4f, 0.4f, 1f));
-		// colorPalette.SetPixel(2, 2, new Color(0.5f, 0.5f, 0.5f, 1f));
-		colorPalette.SetPixel(0, 0, Color.red);
-		colorPalette.SetPixel(1, 0, Color.green);
-		colorPalette.SetPixel(0, 1, Color.blue);
-		colorPalette.SetPixel(1, 1, Color.magenta);
-		
-		colorPalette.filterMode = FilterMode.Point;
- 
-     	// Apply all SetPixel calls
-     	colorPalette.Apply();
+		InitializeColorPalette(PaletteSize);
 	}
 	
-	// Update is called once per frame
-	void Update () {
-		 for(int i = 0; i < 4; i ++)
-		 {
-		 	print(colorData[i * 4 + 0] + " " + i);
-		// 	print(colorData[i * 4 + 1]);
-		// 	print(colorData[i * 4 + 2]);
-		 	print(colorData[i * 4 + 3] + " " + i);
-		 }
-		
+	void Update () 
+	{
+		if(Input.GetKey(KeyCode.Mouse0))
+			linePos = Mathf.Lerp(linePos, 1, lineVel * Time.deltaTime);
 
-		colorqMat.SetTexture("_ColorPalette", colorPalette);
+		if(Input.GetKey(KeyCode.Mouse1))
+			linePos = Mathf.Lerp(linePos, 0, lineVel * Time.deltaTime);	
 
-		//print(histogramData[200]);
+		if(Input.GetKey(KeyCode.Space))
+			linePos = Mathf.Lerp(linePos, 0.5f, 2f * lineVel * Time.deltaTime);
+
+		if(Input.GetKeyDown(KeyCode.E))
+		{
+			PaletteSize ++;
+			InitializeColorPalette(PaletteSize);
+		}
+
+		if(Input.GetKeyDown(KeyCode.Q))
+		{
+			PaletteSize --;
+			InitializeColorPalette(PaletteSize);
+		}
+
+		if(Input.GetKeyDown(KeyCode.R))
+		{
+			ColorQMat.EnableKeyword("EUCLIDIAN_DISTANCE");
+			Trainer.SetBool("EUCLIDIAN_DISTANCE", true);
+		}
+
+		if(Input.GetKeyDown(KeyCode.T))
+		{
+			ColorQMat.DisableKeyword("EUCLIDIAN_DISTANCE");
+			Trainer.SetBool("EUCLIDIAN_DISTANCE", false);
+		}
+
+		ColorQMat.SetTexture("_ColorPalette", colorPalette);
+		ColorQMat.SetFloat("_LineP", linePos);
+		palette.texture = colorPalette;
 	}
 
 	void OnRenderImage(RenderTexture src, RenderTexture dest)
 	{
-		Graphics.Blit(src, dest, colorqMat);
+		Graphics.Blit(src, dest, ColorQMat);
 
-		computeShader.SetTexture(handleColorQ, "InputTexture", src);
-		computeShader.SetTexture(handleColorQ, "ColorPalette", colorPalette);
-		computeShader.Dispatch(handleColorQInitialize, 4, 1, 1);
-		computeShader.Dispatch(handleColorQ, (src.width + 7)/8, (src.height + 7)/8, 1);
+		//Train our color palette
+		Trainer.SetTexture(handleColorQ, "Screen", src);
+		Trainer.SetTexture(handleColorQ, "ColorPalette", colorPalette);
+		Trainer.Dispatch(handleColorQInitialize, PaletteSize, 1, 1);
+		Trainer.Dispatch(handleColorQ, (src.width + 7)/8, (src.height + 7)/8, 1);
+
+		//Retrieve Data
 		colorBuffer.GetData(colorData);
 
+		UpdateColorPalette();
+	}
+
+	void InitializeColorPalette	(int size)
+	{
+		//Allocating some variables
+		colorBuffer = new ComputeBuffer(size, sizeof(int) * 4);
+		colorData = new int[size * 4];
+		newColors = new Color[size];
+
+		Trainer.SetBuffer(handleColorQ, "ColorBuffer", colorBuffer);
+		Trainer.SetBuffer(handleColorQInitialize, "ColorBuffer", colorBuffer);
+
+		//Create texture
+		colorPalette = new Texture2D(1, size, TextureFormat.ARGB32, false);
+
+		//Set values
+		for (int i = 0; i < size; i ++)
+			colorPalette.SetPixel(0, i, new Color(i / (float)size, i / (float)size, i / (float)size, 1f));
+		
+		//Apply
+		colorPalette.filterMode = FilterMode.Point;
+     	colorPalette.Apply();
+		ColorQMat.SetFloat("_Size", size);
+		Trainer.SetInt("Size", size);
+	}
+
+	void UpdateColorPalette()
+	{
 		int maxIndex = 0;
 		int maxData = 0;
 
-		for(int i = 0; i < 4; i ++)
+		//Loop through accumulated texture(actually buffer) and compute the new colors
+		for(int i = 0; i < PaletteSize; i ++)
 		{
 			if(colorData[i * 4 + 3] != 0)
 			{
@@ -104,40 +131,42 @@ public class ColorQuantization : MonoBehaviour {
 					maxIndex = i;
 				}
 			}
-			//else
-				//newColors[i] = Color.white;
-
-			//print(newColors[i]);
-			if(colorData[i * 4 + 3] < Threshold)
-			{
-				// newColors[i].r = thresholdVec[i] * 0.0001f;
-				// newColors[i].g = thresholdVec[i] * 0.0001f;
-				// newColors[i].b = thresholdVec[i] * 0.0001f;
-				// thresholdVec[i] ++;
-				// print(newColors[i]);
-
-			}
-
-			//if(newColors[i] == new Color(0, 0, 0, 1f))
-				//newColors[i] = Color.magenta;
+			else
+				newColors[i] = Color.white;
 		}
 
-		for(int i = 0; i < 4; i ++)
+		//Check if a color is being under-used
+		if (AutoCorrect)
 		{
-			if(colorData[i * 4 + 3] < Threshold)
+			for(int i = 0; i < PaletteSize; i ++)
 			{
-				//newColors[i] = newColors[maxIndex] - new Color(0.05f, 0.05f, 0.05f, 0f);
-				print(newColors[i]);
+				if(colorData[i * 4 + 3] < Threshold)
+					newColors[i] = newColors[maxIndex] - new Color(0.05f, 0.05f, 0.05f, 0f);
 			}
 		}
 
-		// for(int i = 0; i < 4; i ++)
-		// {
-		// 	print(newColors[i].r);
-		// 	print(newColors[i].g);
-		// 	print(newColors[i].b);
-		// }
+		//Update the texture
 		colorPalette.SetPixels(newColors);
 		colorPalette.Apply();
+	}
+
+	void Debug()
+	{
+		//Colors
+		for(int i = 0; i < 4; i ++)
+		{
+			print(newColors[i].r);
+			print(newColors[i].g);
+			print(newColors[i].b);
+		}
+
+		//Density
+		for(int i = 0; i < 4; i ++)
+		 {
+		 	print(colorData[i * 4 + 0] + " " + i);
+		 	print(colorData[i * 4 + 1] + " " + i);
+		 	print(colorData[i * 4 + 2] + " " + i);
+		 	print(colorData[i * 4 + 3] + " " + i);
+		 }
 	}
 }
