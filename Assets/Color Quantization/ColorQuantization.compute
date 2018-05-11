@@ -1,0 +1,76 @@
+﻿// Each #kernel tells which function to compile; you can have many kernels
+#pragma kernel HistogramInitialize
+#pragma kernel HistogramMain
+#pragma kernel ColorQ
+#pragma kernel ColorQInitialize
+
+// Create a RenderTexture with enableRandomWrite flag and set it
+// with cs.SetTexture
+//RWTexture2D<float4> Result;
+Texture2D<float4> InputTexture;
+Texture2D<float4> ColorPalette;
+
+struct histStruct {
+	uint4 color;
+};
+
+struct colorStruct {
+	int4 color;
+};
+
+RWStructuredBuffer<histStruct> HistogramBuffer;
+RWStructuredBuffer<colorStruct> ColorBuffer;
+
+[numthreads(64, 1, 1)]
+void HistogramInitialize(uint3 id : SV_DispatchThreadID)
+{
+	HistogramBuffer[id.x].color = uint4(0, 0, 0, 0);
+}
+
+[numthreads(8,8,1)]
+void HistogramMain (uint3 id : SV_DispatchThreadID)
+{
+	uint4 col = uint4(255 * InputTexture[id.xy]);
+
+	InterlockedAdd(HistogramBuffer[col.r].color.r, 1);
+	InterlockedAdd(HistogramBuffer[col.g].color.g, 1);
+	InterlockedAdd(HistogramBuffer[col.b].color.b, 1);
+	InterlockedAdd(HistogramBuffer[col.a].color.a, 1);
+}
+
+[numthreads(1, 1, 1)]
+void ColorQInitialize(uint3 id : SV_DispatchThreadID)
+{
+	ColorBuffer[id.x].color = int4(0, 0, 0, 0);
+}
+
+[numthreads(8,8,1)]
+void ColorQ(uint3 id : SV_DispatchThreadID)
+{
+	float minDist = 10000000;
+	int currColorIndex = 0;
+	colorStruct texColor;
+	colorStruct currColor;
+	colorStruct colorPalette;
+	texColor.color = int4(255 * InputTexture[id.xy]);
+
+	for(int i = 0; i < 2; i ++)
+		for(int j = 0; j < 2; j ++)
+		{
+			colorPalette.color = int4(255 * ColorPalette[uint2(i, j)]);
+			currColor.color = texColor.color - colorPalette.color;
+
+			float dist = dot(currColor.color, currColor.color);
+			
+			if(dist < minDist)
+			{
+				minDist = dist;
+				currColorIndex = j * 2 + i;
+			}
+		}
+	
+	InterlockedAdd(ColorBuffer[currColorIndex].color.r, texColor.color.r);
+	InterlockedAdd(ColorBuffer[currColorIndex].color.g, texColor.color.g);
+	InterlockedAdd(ColorBuffer[currColorIndex].color.b, texColor.color.b);
+	InterlockedAdd(ColorBuffer[currColorIndex].color.a, 1);
+}
