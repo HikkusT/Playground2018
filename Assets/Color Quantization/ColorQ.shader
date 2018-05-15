@@ -1,4 +1,7 @@
-﻿Shader "Playground/ColorQ"
+﻿//
+//Made by HikkusT
+//
+Shader "Playground/ColorQ"
 {
 	Properties
 	{

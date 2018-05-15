@@ -1,12 +1,11 @@
-﻿//#define EUCLIDIAN_DISTANCE
+﻿//
+//Made by HikkusT
+//
+//#define EUCLIDIAN_DISTANCE
 
-// Each #kernel tells which function to compile; you can have many kernels
 #pragma kernel ColorQ
 #pragma kernel ColorQInitialize
 
-// Create a RenderTexture with enableRandomWrite flag and set it
-// with cs.SetTexture
-//RWTexture2D<float4> Result;
 Texture2D<float4> Screen;
 Texture2D<float4> ColorPalette;
 int Size;
