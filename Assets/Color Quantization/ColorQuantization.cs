@@ -153,7 +153,7 @@ public class ColorQuantization : MonoBehaviour {
 	void Debug()
 	{
 		//Colors
-		for(int i = 0; i < 4; i ++)
+		for(int i = 0; i < PaletteSize; i ++)
 		{
 			print(newColors[i].r);
 			print(newColors[i].g);
@@ -161,7 +161,7 @@ public class ColorQuantization : MonoBehaviour {
 		}
 
 		//Density
-		for(int i = 0; i < 4; i ++)
+		for(int i = 0; i < PaletteSize; i ++)
 		 {
 		 	print(colorData[i * 4 + 0] + " " + i);
 		 	print(colorData[i * 4 + 1] + " " + i);

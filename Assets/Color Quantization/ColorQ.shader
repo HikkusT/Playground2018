@@ -17,7 +17,7 @@
 		{
 			CGPROGRAM
 			//#define EUCLIDEAN_DISTANCE
-			#define VISUAL_DEBUG_MODE
+			//#define VISUAL_DEBUG_MODE
 			//#define PALETTE_DEBUG_MODE
 
 			#pragma vertex vert
